@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Data Quality Pipeline</title>
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="/styles.css" />
+</head>
+<body>
+  <div class="bg-art" aria-hidden="true">
+    <svg viewBox="0 0 1440 720" preserveAspectRatio="xMidYMin slice">
+      <defs>
+        <linearGradient id="stream" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0%" stop-color="#3dd6c6" stop-opacity="0.22" />
+          <stop offset="100%" stop-color="#3dd6c6" stop-opacity="0" />
+        </linearGradient>
+      </defs>
+      <path fill="none" stroke="url(#stream)" stroke-width="1.6"
+        d="M-40 120 C 180 40, 320 220, 520 140 S 860 40, 1100 180 S 1380 80, 1520 160" />
+      <path fill="none" stroke="#3dd6c6" stroke-opacity="0.08" stroke-width="1.2"
+        d="M-40 220 C 200 280, 360 80, 580 200 S 900 320, 1140 180 S 1400 260, 1520 200" />
+      <g fill="#3dd6c6" fill-opacity="0.12">
+        <circle cx="180" cy="96" r="4" />
+        <circle cx="520" cy="140" r="5" />
+        <circle cx="860" cy="72" r="3.5" />
+        <circle cx="1100" cy="180" r="4.5" />
+      </g>
+    </svg>
+  </div>
+
+  <header class="top">
+    <div class="brand">
+      <span class="logo" aria-hidden="true">
+        <svg viewBox="0 0 48 48">
+          <rect x="4" y="4" width="40" height="40" rx="12" fill="none" stroke="currentColor" stroke-width="1.6" />
+          <path d="M14 30 V16 h7 a6 6 0 0 1 0 12H14" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" />
+          <path d="M28 30 V16 M28 16 l8 14 M36 16 v14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+        </svg>
+      </span>
+      <div>
+        <p class="eyebrow">Live demo</p>
+        <h1>Data Quality Pipeline</h1>
+        <p class="sub">Generator → quality checks → live metrics (in-browser)</p>
+      </div>
+    </div>
+    <div class="status" id="status">
+      <svg class="status-dot" viewBox="0 0 16 16" aria-hidden="true">
+        <circle cx="8" cy="8" r="4.5" fill="currentColor" />
+        <circle class="status-ring" cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.2" />
+      </svg>
+      <span id="statusText">connecting…</span>
+    </div>
+  </header>
+
+  <section class="pipeline" aria-label="Pipeline flow">
+    <div class="pipe-step">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="8" width="22" height="16" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 14h8M9 18h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      Generator
+    </div>
+    <svg class="pipe-arrow" viewBox="0 0 28 12" aria-hidden="true"><path d="M1 6h22M18 2l5 4-5 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div class="pipe-step">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M8 10h16v12H8z" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M11 14h10M11 18h7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      Landing
+    </div>
+    <svg class="pipe-arrow" viewBox="0 0 28 12" aria-hidden="true"><path d="M1 6h22M18 2l5 4-5 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div class="pipe-step">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><path d="M16 5 7 9v7c0 6.2 3.8 10.2 9 11.8 5.2-1.6 9-5.6 9-11.8V9l-9-4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M12.5 16.2 15 18.7l4.8-5.2" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Checker
+    </div>
+    <svg class="pipe-arrow" viewBox="0 0 28 12" aria-hidden="true"><path d="M1 6h22M18 2l5 4-5 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
+    <div class="pipe-step">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect x="5" y="7" width="22" height="18" rx="3" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M9 20v-5l3 3 3-6 3 8 2-4h3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      Dashboard
+    </div>
+  </section>
+
+  <section class="metrics" id="metrics">
+    <article class="metric tone-accent">
+      <div class="metric-head">
+        <span class="metric-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="12" rx="2.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M3 10h18M7 15h4" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg>
+        </span>
+        <span class="label">Batches</span>
+      </div>
+      <strong id="batchesTotal">0</strong>
+      <svg class="metric-spark" viewBox="0 0 120 28" aria-hidden="true">
+        <path d="M0 18 C12 16, 18 10, 28 12 S44 22, 56 14 S76 6, 88 11 S108 20, 120 8" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      </svg>
+    </article>
+
+    <article class="metric tone-accent">
+      <div class="metric-head">
+        <span class="metric-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        </span>
+        <span class="label">Rows checked</span>
+      </div>
+      <strong id="rowsTotal">0</strong>
+      <svg class="metric-spark" viewBox="0 0 120 28" aria-hidden="true">
+        <path d="M0 16 C14 15, 22 14, 34 15 S54 18, 66 13 S88 8, 100 12 S112 16, 120 14" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      </svg>
+    </article>
+
+    <article class="metric tone-warn">
+      <div class="metric-head">
+        <span class="metric-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 12 12 5.8 A6.2 6.2 0 0 1 17.4 15.2 Z" fill="currentColor" opacity="0.85"/></svg>
+        </span>
+        <span class="label">Check pass rate</span>
+      </div>
+      <strong id="passRate">0%</strong>
+      <svg class="metric-spark" viewBox="0 0 120 28" aria-hidden="true">
+        <path d="M0 14 H120" stroke="currentColor" stroke-opacity="0.25" stroke-width="1"/>
+        <path d="M0 16 C18 16, 24 12, 36 13 S56 17, 70 14 S92 11, 120 13" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      </svg>
+    </article>
+
+    <article class="metric tone-danger">
+      <div class="metric-head">
+        <span class="metric-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 3 3.8 18.2A1.2 1.2 0 0 0 4.9 20h14.2a1.2 1.2 0 0 0 1.1-1.8L12 3z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 9v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="16.6" r="1" fill="currentColor"/></svg>
+        </span>
+        <span class="label">Failed batches</span>
+      </div>
+      <strong id="batchesFailed">0</strong>
+      <svg class="metric-spark" viewBox="0 0 120 28" aria-hidden="true">
+        <path d="M0 20 C10 19, 16 18, 24 17 S40 16, 48 10 S64 2, 72 8 S92 22, 104 12 S114 8, 120 6" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      </svg>
+    </article>
+
+    <article class="metric tone-accent">
+      <div class="metric-head">
+        <span class="metric-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="7.2" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M9 4.8h6M12 13l3.2-2.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="label">Run latency p50</span>
+      </div>
+      <strong id="p50">0 ms</strong>
+      <svg class="metric-spark" viewBox="0 0 120 28" aria-hidden="true">
+        <path d="M0 16 C16 16, 28 15, 40 14 S58 4, 70 8 S92 22, 120 10" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      </svg>
+    </article>
+
+    <article class="metric tone-warn">
+      <div class="metric-head">
+        <span class="metric-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M3 13h3l2.2-5 3.2 10 2.4-5H21" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </span>
+        <span class="label">Run latency p95</span>
+      </div>
+      <strong id="p95">0 ms</strong>
+      <svg class="metric-spark" viewBox="0 0 120 28" aria-hidden="true">
+        <path d="M0 15 C10 8, 18 22, 28 14 S44 6, 56 16 S76 24, 90 12 S108 10, 120 14" fill="none" stroke="currentColor" stroke-width="1.6"/>
+      </svg>
+    </article>
+  </section>
+
+  <section class="checks" id="checkCards" aria-label="Checks by type"></section>
+
+  <section class="grid">
+    <div class="panel">
+      <h2>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h10" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+        Recent batch runs
+      </h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Batch</th>
+              <th>Rows</th>
+              <th>Pass rate</th>
+              <th>Status</th>
+              <th>Latency</th>
+            </tr>
+          </thead>
+          <tbody id="runsBody"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2>
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 3.8 18.2A1.2 1.2 0 0 0 4.9 20h14.2a1.2 1.2 0 0 0 1.1-1.8L12 3z" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linejoin="round"/><path d="M12 9v5" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/><circle cx="12" cy="16.6" r="1" fill="currentColor"/></svg>
+        Failed checks
+      </h2>
+      <ul id="failList" class="fail-list"></ul>
+    </div>
+  </section>
+
+  <script src="/app.js"></script>
+</body>
+</html>
