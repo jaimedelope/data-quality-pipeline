@@ -2,56 +2,56 @@
 
 End-to-end **batch data-quality demo** for a data engineering portfolio:
 
-**synthetic order batches → quality checker → Redis metrics → live dashboard**
+**synthetic order batches → quality checker → Redis → live dashboard**
 
-Designed to be easy to run locally with Docker and easy to explain in a case study. Complements the [streaming fraud pipeline](https://github.com/jaimedelope/streaming-fraud-pipeline): that one is real-time anomaly scoring; this one is **contract checks + observability** on landing data.
+Designed to be easy to run locally with Docker and easy to explain in a case study. Checks are custom Python (inspired by Great Expectations / Pandera), not a heavy GE install.
 
 ## Live demo
 
 Try the dashboard in the browser: **[data-quality-pipeline-two.vercel.app](https://data-quality-pipeline-two.vercel.app)**
 
-That URL is a static Vercel demo: the same UI and check rules, with batches simulated in the browser (no Redis). Git pushes to `main` redeploy only `web/`. The Docker stack below is the real pipeline.
+That URL is a static Vercel demo: the same UI and check rules, with batches simulated in the browser (no Redis). Git pushes to `master` redeploy only `web/`. The Docker stack below is the real pipeline.
 
 ## Architecture
 
 ```text
-┌────────────┐   batches    ┌──────────────┐   results     ┌──────────┐
-│ Generator  │ ───────────► │    Redis     │ ◄──────────── │ Checker  │
-│ (Python)   │              │  landing +   │ ─────────────► │ (Python) │
-└────────────┘              │   metrics    │   consume      └────┬─────┘
-                            └──────┬───────┘                     │
-                                   │                             │
-                                   ▼                             │
-                            ┌─────────────┐                      │
-                            │  Dashboard  │ ◄────────────────────┘
-                            │   :8089     │
-                            └─────────────┘
+┌────────────┐   CSV/JSON    ┌──────────┐   results    ┌───────┐
+│ Generator  │ ────────────► │ Landing  │ ───────────► │ Redis │
+│ (Python)   │               │  volume  │              └───┬───┘
+└────────────┘               └────┬─────┘                  │
+                                  │                        ▼
+                                  ▼                 ┌─────────────┐
+                            ┌──────────┐            │  Dashboard  │
+                            │ Checker  │───────────►│    :8089    │
+                            │ (Pandas) │  failures  └─────────────┘
+                            └──────────┘
 ```
 
-![Data quality pipeline architecture](docs/architecture.svg)
+![Data quality pipeline: generator, landing, checker, Redis, and dashboard](docs/architecture.svg)
 
 ### What each piece does
 
 | Component | Role |
 |-----------|------|
-| **Generator** | Emits e-commerce order batches (~100 rows) every few seconds. ~12% of rows carry intentional defects (nulls, duplicates, bad currency, future timestamps, orphan SKUs, volume spikes). |
-| **Redis** | Landing queue (`landing:batches`) plus metrics and failure feeds for the UI. |
-| **Checker** | Runs seven explainable DQ rules per batch. Publishes pass/fail, latency, and offender samples. |
-| **Dashboard** | FastAPI UI on `:8089` with pass rates, latest check table, failure feed, and run history. |
+| **Generator** | Emits order batches every ~12s (CSV + JSON) with ~12% intentional defects: nulls, duplicates, bad amounts/currencies, future/stale timestamps, orphan product IDs, anomalous volume. |
+| **Landing** | Shared volume of batch files (demo stand-in for object storage / a lake landing zone). |
+| **Checker** | Runs an explicit 7-check suite; writes pass/fail + metrics + offender samples to Redis. Does **not** use the generator’s `injected_defect` label for scoring. |
+| **Redis** | Live run feed, failed-check feed, latency samples, per-check counters. |
+| **Dashboard** | FastAPI UI on `:8089` — pass rate, checks by type, failure feed, run latency. |
 
-## Quality checks (intentionally explicit)
+## Quality checks
 
-| Check | What it enforces |
-|-------|------------------|
-| **schema** | Required columns present |
-| **completeness** | Null rate on `user_id`, `amount`, `currency`, `order_id` ≤ 3% |
-| **uniqueness** | `order_id` has no duplicates |
-| **validity** | `amount > 0`, currency ∈ {EUR,USD,GBP}, status enum |
-| **freshness** | `event_time` not in the future and not older than 3 hours |
-| **referential** | `product_id` exists in the batch catalog |
-| **volume** | Row count within [40, 160] |
+| Check | What it asserts |
+|-------|-----------------|
+| **Schema** | Required columns present; amount parseable as numeric |
+| **Completeness** | Null rate on `user_id`, `amount`, `currency` ≤ 5% |
+| **Uniqueness** | No duplicate `order_id` |
+| **Validity** | `amount > 0` and ≤ 10k; `currency ∈ {EUR,USD,GBP}`; status enum |
+| **Freshness** | `event_time` not in the future; not older than 30 minutes |
+| **Referential** | `product_id` exists in a reference catalog (40 SKUs) |
+| **Volume** | Batch size within `[40, 120]` rows |
 
-Failed checks include a short detail string and sample offenders — great for walkthroughs in interviews.
+Each check returns `pass` / `fail`, a metric payload, and a small sample of offending rows. The batch score is the % of checks that passed.
 
 ## Quick start
 
@@ -63,7 +63,7 @@ docker compose up --build
 
 Open the dashboard: [http://localhost:8089](http://localhost:8089)
 
-You should see runs within ~10–20 seconds.
+You should see batch runs and failed checks within ~30–60 seconds.
 
 Stop everything:
 
@@ -74,22 +74,21 @@ docker compose down -v
 ## Project layout
 
 ```text
-generator/    # synthetic order batches + injected defects
-checker/      # DQ rules + Redis publishers
-dashboard/    # FastAPI UI (Docker)
-web/          # static Vercel demo (client-side simulation)
-docs/         # architecture diagram
+generator/     # synthetic order batches with labeled defects
+checker/       # Pandas quality suite → Redis
+dashboard/     # FastAPI UI (Docker)
+web/           # static Vercel demo (client-side simulation)
+docs/          # architecture diagram
 docker-compose.yml
 vercel.json
 ```
 
 ## Next ideas (for v2)
 
-- Schedule with Airflow / Prefect and write results to a warehouse table
-- Great Expectations or Pandera suites as the check engine
-- Prometheus histograms + Grafana boards for pass-rate SLO
-- Slack / PagerDuty alert when pass rate drops below a threshold
-- Quarantine topic for failed rows and a repair / replay path
+- Airflow / cron orchestration instead of a polling loop
+- Prometheus / Grafana for check histograms and SLOs
+- Formal Great Expectations or Pandera suites wired to the same landing zone
+- Slack / PagerDuty alerts on repeated check failures
 
 ## Portfolio note
 
