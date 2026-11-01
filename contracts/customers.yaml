@@ -1,0 +1,27 @@
+dataset: customers
+owner: growth-analytics
+description: Customer dimension used by CRM and billing joins.
+sla_pass_rate: 0.95
+columns:
+  customer_id:
+    type: string
+    required: true
+    unique: true
+  email:
+    type: string
+    required: true
+    pattern: "^[^@]+@[^@]+\\.[^@]+$"
+  country:
+    type: string
+    required: true
+    allowed: ["ES", "PT", "FR", "DE", "IT", "GB", "US"]
+  signup_date:
+    type: date
+    required: true
+  is_active:
+    type: bool
+    required: true
+expectations:
+  - type: row_count_between
+    min: 40
+    max: 120

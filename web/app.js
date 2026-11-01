@@ -1,281 +1,222 @@
-/** In-browser simulation of the Docker data-quality pipeline. */
+/** Browser demo: warehouse contract scorecards (not a streaming fraud UI). */
 
-const CATALOG = Array.from({ length: 40 }, (_, i) => `sku_${String(i + 1).padStart(3, "0")}`);
-const CURRENCIES = ["EUR", "USD", "GBP"];
-const STATUSES = ["pending", "paid", "shipped", "cancelled"];
-
-const state = {
-  runsTotal: 0,
-  rowsTotal: 0,
-  failedTotal: 0,
-  durations: [],
-  passRates: [],
-  latestChecks: [],
-  runs: [],
-  failures: [],
+const CONTRACTS = {
+  customers: {
+    owner: "growth-analytics",
+    description: "Customer dimension used by CRM and billing joins.",
+    sla: 95,
+    yaml: `dataset: customers
+owner: growth-analytics
+sla_pass_rate: 0.95
+columns:
+  customer_id: { unique: true, required: true }
+  email: { required: true, pattern: email }
+  country: { allowed: [ES, PT, FR, DE, IT, GB, US] }
+expectations:
+  - type: row_count_between
+    min: 40
+    max: 120`,
+  },
+  orders: {
+    owner: "commerce-analytics",
+    description: "Fact table of completed checkout events for revenue reporting.",
+    sla: 97,
+    yaml: `dataset: orders
+owner: commerce-analytics
+sla_pass_rate: 0.97
+columns:
+  order_id: { unique: true }
+  customer_id: { references: customers.customer_id }
+  amount_eur: { min: 0.01, max: 5000 }
+  status: { allowed: [paid, refunded, chargeback] }
+expectations:
+  - type: row_count_between
+    min: 60
+    max: 180`,
+  },
+  events: {
+    owner: "product-analytics",
+    description: "Product usage events for funnel and retention dashboards.",
+    sla: 93,
+    yaml: `dataset: events
+owner: product-analytics
+sla_pass_rate: 0.93
+columns:
+  event_id: { unique: true }
+  event_name: { allowed: [view_item, add_to_cart, checkout, search] }
+  event_ts: { freshness_hours: 6 }
+expectations:
+  - type: row_count_between
+    min: 80
+    max: 250`,
+  },
 };
 
-function uuid() {
-  return crypto.randomUUID ? crypto.randomUUID() : `b-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
+const state = {
+  selected: "customers",
+  datasets: {
+    customers: { runs: 0, breaches: 0, passSum: 0, latest: null, checks: [] },
+    orders: { runs: 0, breaches: 0, passSum: 0, latest: null, checks: [] },
+    events: { runs: 0, breaches: 0, passSum: 0, latest: null, checks: [] },
+  },
+  recent: [],
+};
 
-function cleanOrder(now) {
-  return {
-    order_id: uuid(),
-    user_id: `user_${String(1 + Math.floor(Math.random() * 80)).padStart(3, "0")}`,
-    product_id: CATALOG[Math.floor(Math.random() * CATALOG.length)],
-    amount: +(5 + Math.random() * 395).toFixed(2),
-    currency: CURRENCIES[Math.floor(Math.random() * CURRENCIES.length)],
-    status: STATUSES[Math.floor(Math.random() * STATUSES.length)],
-    event_time: new Date(now.getTime() - Math.random() * 120000).toISOString(),
+function simulateChecks(dataset) {
+  const catalog = {
+    customers: [
+      ["required:email", 0.12],
+      ["unique:customer_id", 0.1],
+      ["allowed:country", 0.1],
+      ["pattern:email", 0.14],
+      ["row_count_between", 0.08],
+    ],
+    orders: [
+      ["required:customer_id", 0.1],
+      ["unique:order_id", 0.08],
+      ["fk:customer_id", 0.16],
+      ["range:amount_eur", 0.12],
+      ["allowed:status", 0.1],
+      ["row_count_between", 0.09],
+    ],
+    events: [
+      ["unique:event_id", 0.08],
+      ["allowed:event_name", 0.11],
+      ["freshness:event_ts", 0.15],
+      ["required:session_id", 0.1],
+      ["row_count_between", 0.09],
+    ],
   };
-}
 
-function injectDefect(order, now) {
-  const kinds = [
-    "null_user",
-    "null_amount",
-    "negative_amount",
-    "bad_currency",
-    "bad_status",
-    "future_time",
-    "stale_time",
-    "orphan_product",
-    "duplicate_id",
-  ];
-  const kind = kinds[Math.floor(Math.random() * kinds.length)];
-  order.injected_defect = kind;
-  if (kind === "null_user") order.user_id = null;
-  if (kind === "null_amount") order.amount = null;
-  if (kind === "negative_amount") order.amount = +(-1 - Math.random() * 200).toFixed(2);
-  if (kind === "bad_currency") order.currency = "XXX";
-  if (kind === "bad_status") order.status = "unknown";
-  if (kind === "future_time") order.event_time = new Date(now.getTime() + 3600000).toISOString();
-  if (kind === "stale_time") order.event_time = new Date(now.getTime() - 20 * 3600000).toISOString();
-  if (kind === "orphan_product") order.product_id = "sku_missing_999";
-  if (kind === "duplicate_id") order._dup = true;
-  return order;
-}
-
-function makeBatch() {
-  const now = new Date();
-  let size = 100;
-  if (Math.random() < 0.1) size = Math.random() < 0.5 ? 18 : 280;
-  const rows = [];
-  for (let i = 0; i < size; i++) {
-    let row = cleanOrder(now);
-    if (Math.random() < 0.12) row = injectDefect(row, now);
-    rows.push(row);
-  }
-  const dups = rows.filter((r) => r._dup);
-  if (dups.length && rows.length > 1) {
-    dups[0].order_id = rows[0].order_id;
-    dups.forEach((r) => delete r._dup);
-  }
-  return { batch_id: uuid(), produced_at: now.toISOString(), rows, catalog: CATALOG };
-}
-
-function runChecks(batch) {
-  const t0 = performance.now();
-  const rows = batch.rows;
-  const now = Date.now();
-  const catalog = new Set(batch.catalog);
-
-  const completenessOff = [];
-  let nullCells = 0;
-  const critical = ["user_id", "amount", "currency", "order_id"];
-  rows.forEach((r) => {
-    critical.forEach((c) => {
-      if (r[c] == null || r[c] === "") {
-        nullCells += 1;
-        if (completenessOff.length < 5) completenessOff.push({ order_id: r.order_id, field: c });
-      }
-    });
+  const checks = catalog[dataset].map(([name, failP]) => {
+    const passed = Math.random() > failP;
+    return {
+      check_name: name,
+      passed,
+      detail: passed ? `${name} ok` : `${name} failed on sample rows`,
+    };
   });
-  const nullRate = nullCells / Math.max(rows.length * critical.length, 1);
-
-  const seen = new Map();
-  rows.forEach((r) => {
-    if (!r.order_id) return;
-    seen.set(r.order_id, (seen.get(r.order_id) || 0) + 1);
-  });
-  const dups = [...seen.entries()].filter(([, n]) => n > 1).map(([id]) => id);
-
-  let invalid = 0;
-  const validityOff = [];
-  rows.forEach((r) => {
-    const issues = [];
-    if (r.amount != null && Number(r.amount) <= 0) issues.push("amount<=0");
-    if (r.currency != null && !CURRENCIES.includes(r.currency)) issues.push("bad_currency");
-    if (r.status != null && !STATUSES.includes(r.status)) issues.push("bad_status");
-    if (issues.length) {
-      invalid += 1;
-      if (validityOff.length < 5) validityOff.push({ order_id: r.order_id, issue: issues.join(",") });
-    }
-  });
-
-  let stale = 0;
-  const freshOff = [];
-  rows.forEach((r) => {
-    const ts = Date.parse(r.event_time);
-    if (Number.isNaN(ts)) {
-      stale += 1;
-      return;
-    }
-    const ageMin = (now - ts) / 60000;
-    if (ageMin < -1 || ageMin > 180) {
-      stale += 1;
-      if (freshOff.length < 5) freshOff.push({ order_id: r.order_id, issue: ageMin < 0 ? "future" : "stale" });
-    }
-  });
-
-  let orphans = 0;
-  const refOff = [];
-  rows.forEach((r) => {
-    if (!catalog.has(r.product_id)) {
-      orphans += 1;
-      if (refOff.length < 5) refOff.push({ order_id: r.order_id, product_id: r.product_id });
-    }
-  });
-
-  const volumePass = rows.length >= 40 && rows.length <= 160;
-  const checks = [
-    { name: "schema", passed: true, metric: 1, detail: "All required columns present", offenders: [] },
-    {
-      name: "completeness",
-      passed: nullRate <= 0.03,
-      metric: +(1 - nullRate).toFixed(4),
-      detail: `Null rate on critical fields: ${(nullRate * 100).toFixed(2)}%`,
-      offenders: completenessOff,
-    },
-    {
-      name: "uniqueness",
-      passed: dups.length === 0,
-      metric: +(1 - dups.length / Math.max(seen.size, 1)).toFixed(4),
-      detail: dups.length ? `${dups.length} duplicate order_id values` : "order_id unique",
-      offenders: dups.slice(0, 5).map((id) => ({ order_id: id, issue: "duplicate" })),
-    },
-    {
-      name: "validity",
-      passed: invalid / rows.length <= 0.05,
-      metric: +(1 - invalid / rows.length).toFixed(4),
-      detail: `Invalid rows: ${invalid}/${rows.length}`,
-      offenders: validityOff,
-    },
-    {
-      name: "freshness",
-      passed: stale / rows.length <= 0.05,
-      metric: +(1 - stale / rows.length).toFixed(4),
-      detail: `Stale/future timestamps: ${stale}/${rows.length}`,
-      offenders: freshOff,
-    },
-    {
-      name: "referential",
-      passed: orphans / rows.length <= 0.02,
-      metric: +(1 - orphans / rows.length).toFixed(4),
-      detail: `Orphan product_id rows: ${orphans}/${rows.length}`,
-      offenders: refOff,
-    },
-    {
-      name: "volume",
-      passed: volumePass,
-      metric: rows.length,
-      detail: volumePass
-        ? `Batch size ${rows.length} within [40, 160]`
-        : `Batch size ${rows.length} outside [40, 160]`,
-      offenders: volumePass ? [] : [{ issue: "volume_anomaly", row_count: rows.length }],
-    },
-  ];
-
-  const passed = checks.filter((c) => c.passed).length;
-  const failed = checks.filter((c) => !c.passed);
-  const duration = +(performance.now() - t0).toFixed(2);
+  const passedN = checks.filter((c) => c.passed).length;
+  const passRate = Math.round((passedN / checks.length) * 1000) / 10;
+  const sla = CONTRACTS[dataset].sla;
+  const slaMet = passRate >= sla;
+  const rows = 40 + Math.floor(Math.random() * 160);
   return {
-    batch_id: batch.batch_id,
-    checked_at: new Date().toISOString(),
-    row_count: rows.length,
-    checks_passed: passed,
-    checks_failed: failed.length,
-    pass_rate_pct: +((passed / checks.length) * 100).toFixed(1),
-    duration_ms: duration,
+    pass_rate: passRate,
+    sla_pass_rate: sla,
+    sla_met: slaMet,
+    row_count: rows,
+    checks_passed: passedN,
+    checks_total: checks.length,
+    duration_ms: +(2 + Math.random() * 12).toFixed(2),
+    file_name: `${dataset}_${new Date().toISOString().replace(/[-:TZ.]/g, "").slice(0, 14)}.csv`,
+    finished_at: new Date().toISOString(),
     checks,
-    failed_checks: failed,
   };
+}
+
+function tickDataset(dataset) {
+  const result = simulateChecks(dataset);
+  const bucket = state.datasets[dataset];
+  bucket.runs += 1;
+  bucket.passSum += result.pass_rate;
+  if (!result.sla_met) bucket.breaches += 1;
+  bucket.latest = result;
+  bucket.checks = result.checks;
+  state.recent.unshift({
+    dataset,
+    file_name: result.file_name,
+    pass_rate: result.pass_rate,
+    sla_met: result.sla_met,
+    row_count: result.row_count,
+    duration_ms: result.duration_ms,
+    finished_at: result.finished_at,
+  });
+  state.recent = state.recent.slice(0, 20);
 }
 
 function render() {
-  document.getElementById("runsTotal").textContent = state.runsTotal;
-  document.getElementById("rowsTotal").textContent = state.rowsTotal;
-  document.getElementById("passRate").textContent = `${state.passRates[0] ?? 0}%`;
-  const avgPass = state.passRates.length
-    ? state.passRates.reduce((a, b) => a + b, 0) / state.passRates.length
-    : 0;
-  document.getElementById("avgPass").textContent = `${avgPass.toFixed(1)}%`;
-  document.getElementById("failedTotal").textContent = state.failedTotal;
-  const avgDur = state.durations.length
-    ? state.durations.reduce((a, b) => a + b, 0) / state.durations.length
-    : 0;
-  document.getElementById("avgDuration").textContent = `${avgDur.toFixed(2)} ms`;
-
-  const checksBody = document.getElementById("checksBody");
-  checksBody.innerHTML = state.latestChecks
-    .map(
-      (c) => `<tr class="${c.passed ? "" : "anomaly"}"><td>${c.name}</td><td>${
-        c.passed ? "PASS" : "FAIL"
-      }</td><td>${c.metric}</td><td>${c.detail}</td></tr>`
-    )
-    .join("");
-
-  const failList = document.getElementById("failList");
-  if (!state.failures.length) {
-    failList.innerHTML = `<li style="background:transparent;border-style:dashed"><div class="meta">No failures yet.</div></li>`;
-  } else {
-    failList.innerHTML = state.failures
-      .map(
-        (f) => `<li><div class="anom-icon">!</div><div><div class="title">${f.name}</div><div class="meta">${f.detail}</div></div></li>`
-      )
-      .join("");
-  }
-
-  document.getElementById("runsBody").innerHTML = state.runs
-    .map((r) => {
-      const when = (r.checked_at || "").replace("T", " ").slice(0, 19);
-      return `<tr class="${r.checks_failed ? "anomaly" : ""}"><td>${r.batch_id.slice(
-        0,
-        8
-      )}</td><td>${r.row_count}</td><td>${r.pass_rate_pct}%</td><td>${
-        (r.failed_names || []).join(", ") || "—"
-      }</td><td>${r.duration_ms} ms</td><td>${when}</td></tr>`;
+  const list = document.getElementById("datasetList");
+  list.innerHTML = Object.keys(state.datasets)
+    .map((ds) => {
+      const b = state.datasets[ds];
+      const avg = b.runs ? (b.passSum / b.runs).toFixed(1) : "—";
+      return `<button class="dataset-btn ${ds === state.selected ? "active" : ""}" data-ds="${ds}">
+        <span class="name">${ds}</span>
+        <span class="meta">${avg}% avg · ${b.breaches} breaches</span>
+      </button>`;
     })
     .join("");
+  list.querySelectorAll("button").forEach((btn) =>
+    btn.addEventListener("click", () => {
+      state.selected = btn.dataset.ds;
+      render();
+    })
+  );
+
+  const ds = state.selected;
+  const bucket = state.datasets[ds];
+  const contract = CONTRACTS[ds];
+  document.getElementById("datasetTitle").textContent = ds;
+  document.getElementById("contractYaml").textContent = contract.yaml;
+
+  if (!bucket.latest) {
+    document.getElementById("scorecard").innerHTML = `<p class="empty">Waiting…</p>`;
+    document.getElementById("checksWrap").innerHTML = "";
+  } else {
+    const p = bucket.latest.pass_rate;
+    document.getElementById("scorecard").innerHTML = `
+      <div class="score-row">
+        <div class="score-ring" style="--p:${p}"><strong>${p}%</strong></div>
+        <div>
+          <div class="sla-pill ${bucket.latest.sla_met ? "met" : "breach"}">${
+            bucket.latest.sla_met ? "SLA met" : "SLA breach"
+          } · threshold ${bucket.latest.sla_pass_rate}%</div>
+          <p style="margin:10px 0 0;color:var(--muted);font-size:14px;line-height:1.5">
+            Owner: <strong>${contract.owner}</strong><br/>
+            Latest file <span class="mono">${bucket.latest.file_name}</span> ·
+            ${bucket.latest.row_count} rows ·
+            ${bucket.latest.checks_passed}/${bucket.latest.checks_total} checks
+          </p>
+          <p style="margin:8px 0 0;color:var(--muted);font-size:13px">${contract.description}</p>
+        </div>
+      </div>`;
+    document.getElementById("checksWrap").innerHTML = `
+      <table class="checks"><thead><tr><th>Check</th><th>Status</th><th>Detail</th></tr></thead>
+      <tbody>${bucket.checks
+        .map(
+          (c) => `<tr><td class="mono">${c.check_name}</td><td><span class="tag ${
+            c.passed ? "pass" : "fail"
+          }">${c.passed ? "PASS" : "FAIL"}</span></td><td>${c.detail}</td></tr>`
+        )
+        .join("")}</tbody></table>`;
+  }
+
+  const runs = Object.values(state.datasets).reduce((a, b) => a + b.runs, 0);
+  const breaches = Object.values(state.datasets).reduce((a, b) => a + b.breaches, 0);
+  const passSum = Object.values(state.datasets).reduce((a, b) => a + b.passSum, 0);
+  document.getElementById("sumRuns").textContent = runs;
+  document.getElementById("sumBreaches").textContent = breaches;
+  document.getElementById("sumPass").textContent = runs ? `${(passSum / runs).toFixed(1)}%` : "0%";
+
+  document.getElementById("runsWrap").innerHTML = `
+    <table class="runs"><thead><tr><th>Dataset</th><th>File</th><th>Pass</th><th>SLA</th><th>Rows</th><th>Latency</th><th>When</th></tr></thead>
+    <tbody>${state.recent
+      .map(
+        (r) => `<tr>
+          <td>${r.dataset}</td><td class="mono">${r.file_name}</td><td>${r.pass_rate}%</td>
+          <td><span class="tag ${r.sla_met ? "pass" : "fail"}">${r.sla_met ? "MET" : "BREACH"}</span></td>
+          <td>${r.row_count}</td><td>${r.duration_ms} ms</td>
+          <td class="mono">${r.finished_at.replace("T", " ").slice(0, 19)}</td>
+        </tr>`
+      )
+      .join("")}</tbody></table>`;
 }
 
 function tick() {
-  const result = runChecks(makeBatch());
-  state.runsTotal += 1;
-  state.rowsTotal += result.row_count;
-  state.failedTotal += result.checks_failed;
-  state.durations.unshift(result.duration_ms);
-  state.durations = state.durations.slice(0, 40);
-  state.passRates.unshift(result.pass_rate_pct);
-  state.passRates = state.passRates.slice(0, 40);
-  state.latestChecks = result.checks;
-  state.runs.unshift({
-    batch_id: result.batch_id,
-    checked_at: result.checked_at,
-    row_count: result.row_count,
-    pass_rate_pct: result.pass_rate_pct,
-    checks_failed: result.checks_failed,
-    duration_ms: result.duration_ms,
-    failed_names: result.failed_checks.map((c) => c.name),
-  });
-  state.runs = state.runs.slice(0, 20);
-  result.failed_checks.forEach((c) => {
-    state.failures.unshift({ name: c.name, detail: c.detail });
-  });
-  state.failures = state.failures.slice(0, 20);
+  ["customers", "orders", "events"].forEach(tickDataset);
   render();
 }
 
 tick();
-setInterval(tick, 3500);
+setInterval(tick, 4000);

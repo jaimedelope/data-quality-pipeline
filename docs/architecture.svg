@@ -1,33 +1,39 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 920 280" role="img" aria-label="Data quality pipeline architecture">
-  <rect width="920" height="280" fill="#0b1220"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 300" role="img" aria-label="Data contract scorecards architecture">
+  <rect width="960" height="300" fill="#f4f1ea"/>
+  <g font-family="IBM Plex Sans, Segoe UI, sans-serif">
+    <rect x="30" y="100" width="150" height="70" rx="4" fill="#fffcf7" stroke="#d6d3d1"/>
+    <text x="105" y="130" text-anchor="middle" fill="#1c1917" font-size="14" font-weight="600">Generator</text>
+    <text x="105" y="150" text-anchor="middle" fill="#78716c" font-size="12">landing CSVs</text>
+
+    <path d="M180 135 H230" stroke="#b45309" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="230" y="100" width="150" height="70" rx="4" fill="#fffcf7" stroke="#d6d3d1"/>
+    <text x="305" y="130" text-anchor="middle" fill="#1c1917" font-size="14" font-weight="600">Contracts</text>
+    <text x="305" y="150" text-anchor="middle" fill="#78716c" font-size="12">YAML SLAs</text>
+
+    <path d="M380 135 H430" stroke="#b45309" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="430" y="100" width="160" height="70" rx="4" fill="#fffcf7" stroke="#d6d3d1"/>
+    <text x="510" y="130" text-anchor="middle" fill="#1c1917" font-size="14" font-weight="600">Validator</text>
+    <text x="510" y="150" text-anchor="middle" fill="#78716c" font-size="12">checks + quarantine</text>
+
+    <path d="M590 135 H640" stroke="#b45309" stroke-width="2" marker-end="url(#a)"/>
+
+    <rect x="640" y="55" width="140" height="55" rx="4" fill="#dcfce7" stroke="#86efac"/>
+    <text x="710" y="88" text-anchor="middle" fill="#166534" font-size="13" font-weight="600">processed/</text>
+
+    <rect x="640" y="125" width="140" height="55" rx="4" fill="#fee2e2" stroke="#fca5a5"/>
+    <text x="710" y="158" text-anchor="middle" fill="#991b1b" font-size="13" font-weight="600">quarantine/</text>
+
+    <rect x="800" y="100" width="130" height="70" rx="4" fill="#fef3c7" stroke="#f59e0b"/>
+    <text x="865" y="130" text-anchor="middle" fill="#1c1917" font-size="14" font-weight="600">SQLite</text>
+    <text x="865" y="150" text-anchor="middle" fill="#78716c" font-size="12">scorecards</text>
+
+    <text x="480" y="240" text-anchor="middle" fill="#b45309" font-size="13">customers · orders · events — contract scorecards on :8090</text>
+  </g>
   <defs>
-    <marker id="arrow" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
-      <path d="M0,0 L6,3 L0,6 Z" fill="#3dd6c6"/>
+    <marker id="a" markerWidth="8" markerHeight="8" refX="6" refY="3" orient="auto">
+      <path d="M0,0 L6,3 L0,6 Z" fill="#b45309"/>
     </marker>
   </defs>
-  <g font-family="Segoe UI, system-ui, sans-serif">
-    <rect x="40" y="90" width="160" height="70" rx="12" fill="#121a2b" stroke="#243049"/>
-    <text x="120" y="122" text-anchor="middle" fill="#e8eefc" font-size="15" font-weight="600">Generator</text>
-    <text x="120" y="142" text-anchor="middle" fill="#93a0b8" font-size="12">order batches</text>
-
-    <line x1="200" y1="125" x2="260" y2="125" stroke="#3dd6c6" stroke-width="2" marker-end="url(#arrow)"/>
-
-    <rect x="260" y="90" width="160" height="70" rx="12" fill="#121a2b" stroke="#243049"/>
-    <text x="340" y="122" text-anchor="middle" fill="#e8eefc" font-size="15" font-weight="600">Redis landing</text>
-    <text x="340" y="142" text-anchor="middle" fill="#93a0b8" font-size="12">landing:batches</text>
-
-    <line x1="420" y1="125" x2="480" y2="125" stroke="#3dd6c6" stroke-width="2" marker-end="url(#arrow)"/>
-
-    <rect x="480" y="90" width="170" height="70" rx="12" fill="#121a2b" stroke="#243049"/>
-    <text x="565" y="122" text-anchor="middle" fill="#e8eefc" font-size="15" font-weight="600">Quality checker</text>
-    <text x="565" y="142" text-anchor="middle" fill="#93a0b8" font-size="12">7 DQ rules</text>
-
-    <line x1="650" y1="125" x2="710" y2="125" stroke="#3dd6c6" stroke-width="2" marker-end="url(#arrow)"/>
-
-    <rect x="710" y="90" width="160" height="70" rx="12" fill="#121a2b" stroke="#243049"/>
-    <text x="790" y="122" text-anchor="middle" fill="#e8eefc" font-size="15" font-weight="600">Dashboard</text>
-    <text x="790" y="142" text-anchor="middle" fill="#93a0b8" font-size="12">:8089</text>
-
-    <text x="460" y="230" text-anchor="middle" fill="#3dd6c6" font-size="13">schema · completeness · uniqueness · validity · freshness · referential · volume</text>
-  </g>
 </svg>

@@ -1,31 +1,32 @@
-"""Live dashboard for the data-quality / observability pipeline."""
+"""Scorecard API for warehouse data-contract validation results."""
 
 from __future__ import annotations
 
 import json
 import os
-import statistics
+import sqlite3
 from pathlib import Path
 
-import redis
-from fastapi import FastAPI
-from fastapi.responses import FileResponse, JSONResponse
+import yaml
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
+DATA_DIR = Path(os.getenv("DATA_DIR", "./data"))
+CONTRACTS_DIR = Path(os.getenv("CONTRACTS_DIR", "./contracts"))
+DB_PATH = DATA_DIR / "quality.db"
 
-app = FastAPI(title="Data Quality Pipeline Dashboard")
+app = FastAPI(title="Data Contract Scorecards")
 static_dir = Path(__file__).parent / "static"
 app.mount("/static", StaticFiles(directory=static_dir), name="static")
 
-_redis: redis.Redis | None = None
 
-
-def get_redis() -> redis.Redis:
-    global _redis
-    if _redis is None:
-        _redis = redis.Redis.from_url(REDIS_URL, decode_responses=True)
-    return _redis
+def db() -> sqlite3.Connection:
+    if not DB_PATH.exists():
+        raise HTTPException(status_code=503, detail="quality.db not ready yet")
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    return conn
 
 
 @app.get("/")
@@ -39,48 +40,106 @@ def favicon() -> FileResponse:
 
 
 @app.get("/api/health")
-def health():
+def health() -> dict:
+    return {"status": "ok", "db_exists": DB_PATH.exists()}
+
+
+@app.get("/api/contracts")
+def contracts() -> dict:
+    items = []
+    for path in sorted(CONTRACTS_DIR.glob("*.yaml")):
+        with path.open(encoding="utf-8") as fh:
+            doc = yaml.safe_load(fh)
+        items.append(
+            {
+                "dataset": doc.get("dataset"),
+                "owner": doc.get("owner"),
+                "description": doc.get("description"),
+                "sla_pass_rate": doc.get("sla_pass_rate"),
+                "columns": list((doc.get("columns") or {}).keys()),
+                "yaml": path.read_text(encoding="utf-8"),
+            }
+        )
+    return {"contracts": items}
+
+
+@app.get("/api/scorecards")
+def scorecards() -> dict:
     try:
-        get_redis().ping()
-        return {"status": "ok", "redis": True}
-    except Exception as exc:  # noqa: BLE001
-        return JSONResponse({"status": "degraded", "redis": False, "error": str(exc)}, status_code=503)
+        conn = db()
+    except HTTPException:
+        return {"datasets": [], "recent_runs": [], "summary": {"runs": 0, "breaches": 0, "avg_pass": 0}}
 
+    datasets = []
+    for row in conn.execute(
+        """
+        SELECT dataset,
+               COUNT(*) AS runs,
+               AVG(pass_rate) AS avg_pass,
+               SUM(CASE WHEN sla_met = 0 THEN 1 ELSE 0 END) AS breaches,
+               MAX(finished_at) AS last_run
+        FROM runs
+        GROUP BY dataset
+        ORDER BY dataset
+        """
+    ):
+        latest = conn.execute(
+            """
+            SELECT id, pass_rate, sla_pass_rate, sla_met, row_count, checks_passed, checks_total, duration_ms, file_name, finished_at
+            FROM runs WHERE dataset = ? ORDER BY finished_at DESC LIMIT 1
+            """,
+            (row["dataset"],),
+        ).fetchone()
+        latest_checks = []
+        if latest:
+            latest_checks = [
+                dict(c)
+                for c in conn.execute(
+                    "SELECT check_name, passed, detail, sample_json FROM check_results WHERE run_id = ? ORDER BY id",
+                    (latest["id"],),
+                )
+            ]
+            for c in latest_checks:
+                c["sample"] = json.loads(c.pop("sample_json") or "[]")
+                c["passed"] = bool(c["passed"])
 
-@app.get("/api/metrics")
-def metrics() -> dict:
-    r = get_redis()
-    runs_total = int(r.get("metrics:runs_total") or 0)
-    rows_total = int(r.get("metrics:rows_total") or 0)
-    failed_total = int(r.get("metrics:checks_failed_total") or 0)
-    durations = [float(x) for x in r.lrange("metrics:run_duration_ms", 0, 199)]
-    pass_rates = [float(x) for x in r.lrange("metrics:pass_rate_pct", 0, 199)]
+        datasets.append(
+            {
+                "dataset": row["dataset"],
+                "runs": row["runs"],
+                "avg_pass": round((row["avg_pass"] or 0) * 100, 1),
+                "breaches": row["breaches"],
+                "last_run": row["last_run"],
+                "latest": dict(latest) if latest else None,
+                "latest_checks": latest_checks,
+            }
+        )
+        if datasets[-1]["latest"]:
+            datasets[-1]["latest"]["pass_rate"] = round(datasets[-1]["latest"]["pass_rate"] * 100, 1)
+            datasets[-1]["latest"]["sla_pass_rate"] = round(datasets[-1]["latest"]["sla_pass_rate"] * 100, 1)
+            datasets[-1]["latest"]["sla_met"] = bool(datasets[-1]["latest"]["sla_met"])
 
-    avg_duration = statistics.fmean(durations) if durations else 0.0
-    latest_pass = pass_rates[0] if pass_rates else 0.0
-    avg_pass = statistics.fmean(pass_rates) if pass_rates else 0.0
+    recent = [dict(r) for r in conn.execute(
+        """
+        SELECT dataset, file_name, pass_rate, sla_met, row_count, duration_ms, finished_at
+        FROM runs ORDER BY finished_at DESC LIMIT 25
+        """
+    )]
+    for r in recent:
+        r["pass_rate"] = round(r["pass_rate"] * 100, 1)
+        r["sla_met"] = bool(r["sla_met"])
 
-    latest_raw = r.get("run:latest")
-    latest = json.loads(latest_raw) if latest_raw else None
-    checks_raw = r.get("checks:latest")
-    checks = json.loads(checks_raw) if checks_raw else []
+    total_runs = conn.execute("SELECT COUNT(*) AS n FROM runs").fetchone()["n"]
+    breaches = conn.execute("SELECT COUNT(*) AS n FROM runs WHERE sla_met = 0").fetchone()["n"]
+    avg_pass = conn.execute("SELECT AVG(pass_rate) AS a FROM runs").fetchone()["a"] or 0
+    conn.close()
 
     return {
-        "runs_total": runs_total,
-        "rows_total": rows_total,
-        "checks_failed_total": failed_total,
-        "latest_pass_rate_pct": round(latest_pass, 1),
-        "avg_pass_rate_pct": round(avg_pass, 1),
-        "avg_duration_ms": round(avg_duration, 2),
-        "latest_run": latest,
-        "latest_checks": checks,
+        "datasets": datasets,
+        "recent_runs": recent,
+        "summary": {
+            "runs": total_runs,
+            "breaches": breaches,
+            "avg_pass": round(avg_pass * 100, 1),
+        },
     }
-
-
-@app.get("/api/feed")
-def feed(limit: int = 40) -> dict:
-    r = get_redis()
-    limit = max(1, min(limit, 100))
-    runs = [json.loads(x) for x in r.lrange("feed:runs", 0, limit - 1)]
-    failures = [json.loads(x) for x in r.lrange("feed:failures", 0, min(30, limit) - 1)]
-    return {"runs": runs, "failures": failures}

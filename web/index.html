@@ -3,93 +3,56 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Data Quality Pipeline</title>
+  <title>Data Contract Scorecards</title>
   <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="/styles.css" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet" />
 </head>
 <body>
-  <div class="bg-art" aria-hidden="true">
-    <svg viewBox="0 0 1440 720" preserveAspectRatio="xMidYMin slice">
-      <defs>
-        <linearGradient id="stream" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0%" stop-color="#3dd6c6" stop-opacity="0.22" />
-          <stop offset="100%" stop-color="#3dd6c6" stop-opacity="0" />
-        </linearGradient>
-      </defs>
-      <path fill="none" stroke="url(#stream)" stroke-width="1.6"
-        d="M-40 120 C 180 40, 320 220, 520 140 S 860 40, 1100 180 S 1380 80, 1520 160" />
-    </svg>
-  </div>
-
-  <header class="top">
-    <div class="brand">
-      <span class="logo" aria-hidden="true">
-        <svg viewBox="0 0 48 48">
-          <rect x="4" y="4" width="40" height="40" rx="12" fill="none" stroke="currentColor" stroke-width="1.6" />
-          <path d="M14 30 V18 h7 a5.5 5.5 0 0 1 0 11H14" fill="none" stroke="currentColor" stroke-width="2" />
-          <path d="M28 18h8M28 24h8M28 30h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" />
-        </svg>
-      </span>
+  <div class="shell">
+    <header class="topbar">
       <div>
-        <p class="eyebrow">Live demo</p>
-        <h1>Data Quality Pipeline</h1>
-        <p class="sub">In-browser simulation of batch checks (no Docker required)</p>
+        <p class="eyebrow">Warehouse quality · browser demo</p>
+        <h1>Data Contract Scorecards</h1>
+        <p class="sub">Simulated batch validation for <strong>customers</strong>, <strong>orders</strong>, and <strong>events</strong> against YAML contracts. Different problem than streaming fraud detection: contracts, SLAs, and quarantine — not live anomaly scores.</p>
       </div>
-    </div>
-    <div class="status ok" id="status">
-      <svg class="status-dot" viewBox="0 0 16 16" aria-hidden="true">
-        <circle cx="8" cy="8" r="4.5" fill="currentColor" />
-        <circle class="status-ring" cx="8" cy="8" r="6.5" fill="none" stroke="currentColor" stroke-width="1.2" />
-      </svg>
-      <span id="statusText">simulating batches…</span>
-    </div>
-  </header>
+      <div class="badge" id="status">simulating warehouse batches…</div>
+    </header>
 
-  <section class="pipeline" aria-label="Pipeline flow">
-    <div class="pipe-step">Generator</div>
-    <svg class="pipe-arrow" viewBox="0 0 28 12" aria-hidden="true"><path d="M1 6h22M18 2l5 4-5 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    <div class="pipe-step">Quality checks</div>
-    <svg class="pipe-arrow" viewBox="0 0 28 12" aria-hidden="true"><path d="M1 6h22M18 2l5 4-5 4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>
-    <div class="pipe-step">Observability</div>
-  </section>
+    <section class="summary">
+      <article class="stat"><span>Validation runs</span><strong id="sumRuns">0</strong></article>
+      <article class="stat"><span>SLA breaches</span><strong id="sumBreaches">0</strong></article>
+      <article class="stat"><span>Avg pass rate</span><strong id="sumPass">0%</strong></article>
+    </section>
 
-  <section class="metrics">
-    <article class="metric tone-accent"><div class="metric-head"><span class="label">Runs</span></div><strong id="runsTotal">0</strong></article>
-    <article class="metric tone-accent"><div class="metric-head"><span class="label">Rows checked</span></div><strong id="rowsTotal">0</strong></article>
-    <article class="metric tone-warn"><div class="metric-head"><span class="label">Latest pass rate</span></div><strong id="passRate">0%</strong></article>
-    <article class="metric tone-accent"><div class="metric-head"><span class="label">Avg pass rate</span></div><strong id="avgPass">0%</strong></article>
-    <article class="metric tone-danger"><div class="metric-head"><span class="label">Failed checks</span></div><strong id="failedTotal">0</strong></article>
-    <article class="metric tone-accent"><div class="metric-head"><span class="label">Avg run latency</span></div><strong id="avgDuration">0 ms</strong></article>
-  </section>
-
-  <section class="grid">
-    <div class="panel">
-      <h2>Latest checks</h2>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Check</th><th>Status</th><th>Metric</th><th>Detail</th></tr></thead>
-          <tbody id="checksBody"></tbody>
-        </table>
-      </div>
+    <div class="layout">
+      <aside class="side">
+        <h2>Datasets</h2>
+        <div id="datasetList"></div>
+      </aside>
+      <section class="main">
+        <h2 id="datasetTitle">customers</h2>
+        <div id="scorecard"></div>
+        <div class="grid-2">
+          <div class="panel">
+            <h2>Latest checks</h2>
+            <div id="checksWrap"></div>
+          </div>
+          <div class="panel">
+            <h2>Contract</h2>
+            <pre id="contractYaml"></pre>
+          </div>
+        </div>
+      </section>
     </div>
-    <div class="panel">
-      <h2>Recent failures</h2>
-      <ul id="failList" class="anom-list"></ul>
-    </div>
-  </section>
 
-  <section class="grid" style="margin-top:16px">
-    <div class="panel" style="grid-column:1/-1;min-height:auto">
+    <div class="panel" style="margin-top:16px">
       <h2>Recent runs</h2>
-      <div class="table-wrap">
-        <table>
-          <thead><tr><th>Batch</th><th>Rows</th><th>Pass rate</th><th>Failed</th><th>Latency</th><th>When</th></tr></thead>
-          <tbody id="runsBody"></tbody>
-        </table>
-      </div>
+      <div id="runsWrap"></div>
     </div>
-  </section>
-
+  </div>
   <script src="/app.js"></script>
 </body>
 </html>

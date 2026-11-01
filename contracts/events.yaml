@@ -1,0 +1,29 @@
+dataset: events
+owner: product-analytics
+description: Product usage events for funnel and retention dashboards.
+sla_pass_rate: 0.93
+columns:
+  event_id:
+    type: string
+    required: true
+    unique: true
+  customer_id:
+    type: string
+    required: true
+  event_name:
+    type: string
+    required: true
+    allowed: ["view_item", "add_to_cart", "checkout", "search"]
+  event_ts:
+    type: datetime
+    required: true
+  session_id:
+    type: string
+    required: true
+expectations:
+  - type: row_count_between
+    min: 80
+    max: 250
+  - type: freshness_hours
+    column: event_ts
+    max_age_hours: 6

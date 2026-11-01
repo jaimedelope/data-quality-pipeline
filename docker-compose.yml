@@ -1,48 +1,36 @@
 services:
-  redis:
-    image: redis:7.4-alpine
-    ports:
-      - "6379:6379"
-    healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
-      interval: 5s
-      timeout: 3s
-      retries: 10
-
   generator:
     build: ./generator
     environment:
-      LANDING_DIR: /landing
-      BATCH_INTERVAL_SEC: "12"
-      BATCH_SIZE: "80"
-      DEFECT_RATE: "0.12"
+      DATA_DIR: /data
+      RUN_INTERVAL_SEC: "8"
     volumes:
-      - landing:/landing
+      - warehouse-data:/data
 
-  checker:
-    build: ./checker
+  validator:
+    build: ./validator
     environment:
-      LANDING_DIR: /landing
-      REDIS_URL: redis://redis:6379/0
+      DATA_DIR: /data
+      CONTRACTS_DIR: /contracts
       POLL_INTERVAL_SEC: "3"
-      FRESHNESS_MAX_AGE_MIN: "30"
-      VOLUME_MIN: "40"
-      VOLUME_MAX: "120"
     volumes:
-      - landing:/landing
+      - warehouse-data:/data
+      - ./contracts:/contracts:ro
     depends_on:
-      redis:
-        condition: service_healthy
+      - generator
 
   dashboard:
     build: ./dashboard
     ports:
-      - "8089:8089"
+      - "8090:8090"
     environment:
-      REDIS_URL: redis://redis:6379/0
+      DATA_DIR: /data
+      CONTRACTS_DIR: /contracts
+    volumes:
+      - warehouse-data:/data
+      - ./contracts:/contracts:ro
     depends_on:
-      redis:
-        condition: service_healthy
+      - validator
 
 volumes:
-  landing:
+  warehouse-data:

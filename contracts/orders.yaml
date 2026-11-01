@@ -1,0 +1,32 @@
+dataset: orders
+owner: commerce-analytics
+description: Fact table of completed checkout events for revenue reporting.
+sla_pass_rate: 0.97
+columns:
+  order_id:
+    type: string
+    required: true
+    unique: true
+  customer_id:
+    type: string
+    required: true
+    references: customers.customer_id
+  amount_eur:
+    type: float
+    required: true
+    min: 0.01
+    max: 5000
+  status:
+    type: string
+    required: true
+    allowed: ["paid", "refunded", "chargeback"]
+  ordered_at:
+    type: datetime
+    required: true
+expectations:
+  - type: row_count_between
+    min: 60
+    max: 180
+  - type: null_rate_below
+    column: customer_id
+    max: 0.01

@@ -1,4 +1,4 @@
-# Root pin for local runs. Docker builds install per-service requirements.
-redis==5.2.1
+# Root pins for local runs. Docker installs per-service requirements.
+PyYAML==6.0.2
 fastapi==0.115.6
 uvicorn[standard]==0.34.0
