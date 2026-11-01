@@ -8,7 +8,7 @@ Designed to be easy to run locally with Docker and easy to explain in a case stu
 
 ## Live demo
 
-Try the dashboard in the browser: **[data-quality-pipeline.vercel.app](https://data-quality-pipeline.vercel.app)**
+Try the dashboard in the browser: **[data-quality-pipeline-two.vercel.app](https://data-quality-pipeline-two.vercel.app)**
 
 That URL is a static Vercel demo: the same UI and check rules, with batches simulated in the browser (no Redis). Git pushes to `main` redeploy only `web/`. The Docker stack below is the real pipeline.
 
