@@ -1,0 +1,19 @@
+name: Contract fixtures
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  validate-fixtures:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install validator deps
+        run: pip install -r validator/requirements.txt
+      - name: Validate fixtures with Pandera engine
+        run: python scripts/validate_fixtures.py

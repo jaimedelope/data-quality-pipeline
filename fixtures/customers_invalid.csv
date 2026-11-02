@@ -1,0 +1,6 @@
+customer_id,email,country,signup_date,is_active
+cus_dup001,ok@example.com,ES,2024-01-10,true
+cus_dup001,also@example.com,ES,2024-01-11,true
+cus_badmail,not-an-email,FR,2024-02-01,true
+cus_badctry,ok2@example.com,ZZ,2024-02-02,true
+cus_nullmail,,DE,2024-02-03,true
